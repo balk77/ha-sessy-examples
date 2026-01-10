@@ -165,9 +165,31 @@ blueprint:
             seconds: 10
           selector:
             duration: {}
+    # --- KILL SWITCH ADDITION ---
+    kill_switch_section:
+      name: Kill Switch (Optional)
+      description: "Emergency stop functionality"
+      icon: mdi:alert-octagon-outline
+      input:
+        kill_switch_entity:
+          name: Kill Switch Entity
+          description: >
+            (Optional) Select a switch or input_boolean. 
+            If selected and set to ON, the automation will force all batteries to 0W and STOP.
+          default: []
+          selector:
+            entity:
+              domain: 
+                - input_boolean
+                - switch
+              multiple: false
+    # ----------------------------
 
 
 variables:
+  # --- KILL SWITCH VARIABLE ---
+  kill_switch: !input kill_switch_entity
+  # ----------------------------
   # Battery selection
   device_ids: !input battery_device
   min_battery_level: !input battery_soc_min
@@ -253,7 +275,22 @@ action:
         {% endif %}
         {% set grid_power = states(grid_entity) | float %}
         {{ grid_power * multiplier }}
-
+    # --- KILL SWITCH LOGIC (ADDED) ---
+  - if:
+      - condition: template
+        value_template: "{{ kill_switch != none and kill_switch != [] and states(kill_switch) == 'on' }}"
+    then:
+      - repeat:
+          for_each: "{{ battery_setpoint_entity }}"
+          sequence:
+            - action: number.set_value
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                value: 0
+      - stop: "Kill switch engaged. Battery power zeroed. Automation stopped."
+  # ---------------------------------
   - variables:
       # Calculate initial setpoint
       battery: >
