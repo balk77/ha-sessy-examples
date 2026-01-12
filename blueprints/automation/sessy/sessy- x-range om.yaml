@@ -224,6 +224,10 @@ trigger:
 
   - trigger: homeassistant
     event: start
+    
+  - trigger: state
+    entity_id: !input kill_switch_entity
+    to: "on"
 
 action:
   - variables:
@@ -280,15 +284,22 @@ action:
       - condition: template
         value_template: "{{ kill_switch != none and kill_switch != [] and states(kill_switch) == 'on' }}"
     then:
-      - repeat:
-          for_each: "{{ battery_setpoint_entity }}"
-          sequence:
-            - action: number.set_value
-              continue_on_error: true
-              target:
-                entity_id: "{{ repeat.item }}"
-              data:
-                value: 0
+      # --- LOGIC UPDATE ---
+      # Only run the 'set to 0' loop if the automation was actually Triggered BY the kill switch.
+      # If triggered by Grid or anything else, just skip to STOP.
+      - if:
+          - condition: template
+            value_template: "{{ trigger.entity_id == kill_switch }}"
+        then:
+          - repeat:
+              for_each: "{{ battery_setpoint_entity }}"
+              sequence:
+                - action: number.set_value
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    value: 0
       - stop: "Kill switch engaged. Battery power zeroed. Automation stopped."
   # ---------------------------------
   - variables:
